@@ -1,0 +1,27 @@
+name: Android CI Cloud Compile
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    - name: Install Android Build Tools & Compile
+      run: |
+        unzip YoutubeBlocker.zip -d project
+        cd project
+        # Initialize a basic framework structure
+        gradle init --type basic
+        # Compiles source files against the official Android system layer
+        javac -cp $ANDROID_HOME/platforms/android-34/android.jar java/KeywordBlockerService.java
+        zip -r app-release-unsigned.apk AndroidManifest.xml res java
+    - name: Upload APK Package
+      uses: actions/upload-artifact@v4
+      with:
+        name: Watchdog_App
+        path: project/app-release-unsigned.apk
+        
