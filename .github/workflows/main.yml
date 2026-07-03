@@ -1,5 +1,4 @@
-name: Android APK Build
-
+name: Native Android Compile (No Gradle)
 on: [push]
 
 jobs:
@@ -15,29 +14,48 @@ jobs:
         java-version: '17'
         distribution: 'zulu'
 
-    - name: Create Base Project Structure
+    - name: Compile and Package Native APK
       run: |
-        mkdir -p app/src/main/res/xml
-        mkdir -p app/src/main/java/com/light/blocker
-
+        # 1. Setup a clean structure
+        mkdir -p workspace/res/xml
+        mkdir -p workspace/assets
+        mkdir -p obj
+        
+        # 2. Extract your uploaded zip file
         unzip -o "Youtube blocker.zip" -d extracted_temp || true
+        
+        # 3. Flatten files into the workspace tracking directory
+        find extracted_temp -name "AndroidManifest.xml" -exec cp {} workspace/ \;
+        find extracted_temp -name "accessibility_service_config.xml" -exec cp {} workspace/res/xml/ \;
+        find extracted_temp -name "KeywordBlockerService.java" -exec cp {} workspace/ \;
+        
+        cd workspace
+        
+        # 4. Compile Java source code into standard Java bytecode (.class)
+        javac -cp $ANDROID_HOME/platforms/android-34/android.jar KeywordBlockerService.java -d ../obj
+        
+        # 5. Convert Java bytecode into Android Dalvik Executable bytecode (classes.dex)
+        $ANDROID_HOME/build-tools/34.0.0/d8 ../obj/com/light/blocker/KeywordBlockerService.class --lib $ANDROID_HOME/platforms/android-34/android.jar --output .
+        
+        # 6. Process resources and link them into an initial unaligned APK container
+        $ANDROID_HOME/build-tools/34.0.0/aapt2 compile res/xml/accessibility_service_config.xml -o compiled_res.flat
+        $ANDROID_HOME/build-tools/34.0.0/aapt2 link --manifest AndroidManifest.xml -I $ANDROID_HOME/platforms/android-34/android.jar -o unaligned.apk compiled_res.flat
+        
+        # 7. Add the compiled execution code to the APK structure
+        zip -u unaligned.apk classes.dex
+        
+        # 8. Optimize memory alignment for Android runtime performance
+        $ANDROID_HOME/build-tools/34.0.0/zipalign -v 4 unaligned.apk ../watchdog-final.apk
+        
+        # 9. Generate a temporary debug keystore to sign the application so Android installs it
+        keytool -genkeypair -v -keystore ../debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+        
+        # 10. Digitally sign the aligned APK package
+        $ANDROID_HOME/build-tools/34.0.0/apksigner sign --keystore ../debug.keystore --storepass android --keypass android ../watchdog-final.apk
 
-        cp extracted_temp/AndroidManifest.xml app/src/main/ || cp extracted_temp/YoutubeBlocker/AndroidManifest.xml app/src/main/ || true
-
-        cp extracted_temp/accessibility_service_config.xml app/src/main/res/xml/ || cp extracted_temp/YoutubeBlocker/res/xml/accessibility_service_config.xml app/src/main/res/xml/ || true
-
-        cp extracted_temp/KeywordBlockerService.java app/src/main/java/com/light/blocker/ || cp extracted_temp/YoutubeBlocker/java/KeywordBlockerService.java app/src/main/java/com/light/blocker/ || true
-
-        echo "plugins { id 'com.android.application' }" > build.gradle
-        echo "android { compileSdk 34; defaultConfig { applicationId 'com.light.blocker'; minSdk 26; targetSdk 34; versionCode 1; versionName '1.0' } }" >> build.gradle
-        echo "include ':app'" > settings.gradle
-
-    - name: Build with Gradle
-      run: |
-        chmod +x gradlew || gradle assembleDebug
-
-    - name: Upload APK
+    - name: Upload Final APK Package
       uses: actions/upload-artifact@v4
       with:
         name: Watchdog_App
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: watchdog-final.apk
+        
