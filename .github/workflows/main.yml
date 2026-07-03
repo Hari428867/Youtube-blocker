@@ -51,8 +51,8 @@ jobs:
         # 10. Generate a self-signed signature key
         keytool -genkeypair -v -keystore ../debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
         
-        # 11. Sign the final APK package 
-        $ANDROID_HOME/build-tools/34.0.0/apksigner sign --keystore ../debug.keystore --storepass android --keypass android ../watchdog-final.apk
+        # 11. Sign the final APK package using the correct --ks flag
+        $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks ../debug.keystore --storepass android --keypass android ../watchdog-final.apk
 
     - name: Upload Final APK Package
       uses: actions/upload-artifact@v4
