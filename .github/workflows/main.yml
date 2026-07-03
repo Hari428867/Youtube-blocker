@@ -1,40 +1,43 @@
 name: Android APK Build
+
 on: [push]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
-    - name: set up JDK 17
+
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'zulu'
-    
-    # This automatically sets up a proper minimal Android structure in the cloud
+
     - name: Create Base Project Structure
       run: |
         mkdir -p app/src/main/res/xml
         mkdir -p app/src/main/java/com/light/blocker
-        unzip -o YoutubeBlocker.zip -d extracted_temp || true
-        
-        # Move your files into the standard Android spots
+
+        unzip -o "Youtube blocker.zip" -d extracted_temp || true
+
         cp extracted_temp/AndroidManifest.xml app/src/main/ || cp extracted_temp/YoutubeBlocker/AndroidManifest.xml app/src/main/ || true
+
         cp extracted_temp/accessibility_service_config.xml app/src/main/res/xml/ || cp extracted_temp/YoutubeBlocker/res/xml/accessibility_service_config.xml app/src/main/res/xml/ || true
+
         cp extracted_temp/KeywordBlockerService.java app/src/main/java/com/light/blocker/ || cp extracted_temp/YoutubeBlocker/java/KeywordBlockerService.java app/src/main/java/com/light/blocker/ || true
-        
-        # Generate a minimal build script that Gradle expects
+
         echo "plugins { id 'com.android.application' }" > build.gradle
-        echo "android { compileSdk 34; defaultConfigure { applicationId 'com.light.blocker'; minSdk 26; targetSdk 34 } }" >> build.gradle
+        echo "android { compileSdk 34; defaultConfig { applicationId 'com.light.blocker'; minSdk 26; targetSdk 34; versionCode 1; versionName '1.0' } }" >> build.gradle
         echo "include ':app'" > settings.gradle
 
     - name: Build with Gradle
       run: |
         chmod +x gradlew || gradle assembleDebug
-        
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Watchdog_App
         path: app/build/outputs/apk/debug/app-debug.apk
-        
