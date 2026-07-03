@@ -18,39 +18,40 @@ jobs:
       run: |
         # 1. Setup a clean structure
         mkdir -p workspace/res/xml
-        mkdir -p workspace/assets
         mkdir -p obj
         
         # 2. Extract your uploaded zip file
         unzip -o "Youtube blocker.zip" -d extracted_temp || true
         
-        # 3. Flatten files into the workspace tracking directory
+        # 3. Flatten files into our exact layout folder positions
         find extracted_temp -name "AndroidManifest.xml" -exec cp {} workspace/ \;
         find extracted_temp -name "accessibility_service_config.xml" -exec cp {} workspace/res/xml/ \;
         find extracted_temp -name "KeywordBlockerService.java" -exec cp {} workspace/ \;
         
         cd workspace
         
-        # 4. Compile Java source code into standard Java bytecode (.class)
+        # 4. Compile Java source code into bytecode (.class)
         javac -cp $ANDROID_HOME/platforms/android-34/android.jar KeywordBlockerService.java -d ../obj
         
         # 5. Convert Java bytecode into Android Dalvik Executable bytecode (classes.dex)
         $ANDROID_HOME/build-tools/34.0.0/d8 ../obj/com/light/blocker/KeywordBlockerService.class --lib $ANDROID_HOME/platforms/android-34/android.jar --output .
         
-        # 6. Process resources and link them into an initial unaligned APK container
-        $ANDROID_HOME/build-tools/34.0.0/aapt2 compile res/xml/accessibility_service_config.xml -o compiled_res.flat
-        $ANDROID_HOME/build-tools/34.0.0/aapt2 link --manifest AndroidManifest.xml -I $ANDROID_HOME/platforms/android-34/android.jar -o unaligned.apk compiled_res.flat
+        # 6. Compile the entire res directory into an archive bundle (.zip)
+        $ANDROID_HOME/build-tools/34.0.0/aapt2 compile --dir res -o compiled_resources.zip
         
-        # 7. Add the compiled execution code to the APK structure
+        # 7. Use the -R flag to pass the archive container to the linker properly
+        $ANDROID_HOME/build-tools/34.0.0/aapt2 link --manifest AndroidManifest.xml -I $ANDROID_HOME/platforms/android-34/android.jar -R compiled_resources.zip -o unaligned.apk
+        
+        # 8. Inject the executable code into the newly linked container structure
         zip -u unaligned.apk classes.dex
         
-        # 8. Optimize memory alignment for Android runtime performance
+        # 9. Memory-align the package for the Android 15 execution layer
         $ANDROID_HOME/build-tools/34.0.0/zipalign -v 4 unaligned.apk ../watchdog-final.apk
         
-        # 9. Generate a temporary debug keystore to sign the application so Android installs it
+        # 10. Generate a self-signed signature key
         keytool -genkeypair -v -keystore ../debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
         
-        # 10. Digitally sign the aligned APK package
+        # 11. Sign the final APK package 
         $ANDROID_HOME/build-tools/34.0.0/apksigner sign --keystore ../debug.keystore --storepass android --keypass android ../watchdog-final.apk
 
     - name: Upload Final APK Package
